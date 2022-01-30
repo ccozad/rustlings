@@ -6,9 +6,7 @@
 // of "waiting..." and the program ends without timing out when running,
 // you've got it :)
 
-// I AM NOT DONE
-
-use std::sync::Arc;
+use std::sync::{Mutex, Arc};
 use std::thread;
 use std::time::Duration;
 
@@ -16,18 +14,31 @@ struct JobStatus {
     jobs_completed: u32,
 }
 
-fn main() {
-    let status = Arc::new(JobStatus { jobs_completed: 0 });
-    let status_shared = status.clone();
-    let handle = thread::spawn(move || {
-        for _ in 0..10 {
-            thread::sleep(Duration::from_millis(250));
-            println!("hi from the spawned thread!");
-            status_shared.jobs_completed += 1;
-        }
-    });
+impl JobStatus {
+    fn new() -> JobStatus {
+        JobStatus { jobs_completed: 0 }
+    }
+}
 
-    handle.join().unwrap();
+fn main() {
+    let job_status = Arc::new(Mutex::new(JobStatus::new()));
+    let workers = 0..10;
+    let handles: Vec<_> = workers.into_iter().map(|id| {
+        let status_shared = Arc::clone(&job_status);
+        thread::spawn(move || {
+            let elapsed_time = (25 - (7 % (id + 1))) * 10 ;
+            thread::sleep(Duration::from_millis(elapsed_time));
+            let mut status = status_shared.lock().unwrap();
+            status.jobs_completed +=1;
+            println!("Job {} completed in {}ms, jobs completed: {}", id, elapsed_time, status.jobs_completed);
+        }) 
+    }).collect();
+
+    for h in handles {
+        h.join().unwrap();
+    }
+    
+    println!("Total jobs completed: {}", job_status.lock().unwrap().jobs_completed);
     /*while status.jobs_completed < 10 {
         println!("Main thread waiting... ");
         thread::sleep(Duration::from_millis(500));
